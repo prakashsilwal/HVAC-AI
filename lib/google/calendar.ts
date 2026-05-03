@@ -136,7 +136,7 @@ export async function createCalendarAppointment(
         customer_phone: input.customer_phone,
         customer_email: input.customer_email ?? null,
         customer_address: input.service_address,
-        job_type: input.job_type as never,
+        job_type: input.job_type as import('@/lib/database.types').JobType,
         urgency: input.urgency,
         notes: input.notes ?? null,
         scheduled_start: startTime.toISOString(),

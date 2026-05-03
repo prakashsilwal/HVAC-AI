@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import type { Json } from '@/lib/database.types'
 import { createServiceClient } from '@/lib/supabase/server'
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events']
@@ -38,14 +39,23 @@ export async function getAuthenticatedClient(businessId: string) {
   const client = createOAuthClient()
   client.setCredentials(data.gcal_token as Record<string, unknown>)
 
-  // Auto-refresh expired access tokens and persist the new ones
-  client.on('tokens', async (tokens) => {
-    const existing = (data.gcal_token as Record<string, unknown>) ?? {}
-    const merged = { ...existing, ...tokens }
-    await supabase
-      .from('businesses')
-      .update({ gcal_token: merged as unknown as import('@/lib/database.types').Json })
-      .eq('id', businessId)
+  // Auto-refresh: Google only sends refresh_token once, so merge into existing
+  client.on('tokens', async (newTokens) => {
+    try {
+      const existing = (data.gcal_token as Record<string, unknown>) ?? {}
+      // Spread order: existing first so new tokens overwrite stale access_token/expiry
+      const merged = { ...existing, ...newTokens }
+      const { error: updateError } = await supabase
+        .from('businesses')
+        .update({ gcal_token: merged as unknown as Json })
+        .eq('id', businessId)
+
+      if (updateError) {
+        console.error('[google/oauth] Failed to persist refreshed token:', updateError.message)
+      }
+    } catch (err) {
+      console.error('[google/oauth] Token refresh handler error:', err)
+    }
   })
 
   return client
@@ -58,8 +68,12 @@ export async function exchangeCodeAndStore(code: string, businessId: string): Pr
   client.setCredentials(tokens)
 
   const supabase = createServiceClient()
-  await supabase
+  const { error } = await supabase
     .from('businesses')
-    .update({ gcal_token: tokens as unknown as import('@/lib/database.types').Json })
+    .update({ gcal_token: tokens as unknown as Json })
     .eq('id', businessId)
+
+  if (error) {
+    throw new Error(`Failed to store Google tokens: ${error.message}`)
+  }
 }

@@ -1,10 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import type { Database } from '@/lib/database.types'
 
 // Use in Server Components, Route Handlers, Server Actions.
-// Reads the session from cookies — respects RLS via the authed user's JWT.
+// cookies() is lazy-loaded so this file is safe to import in the custom server.
 export async function createClient() {
+  const { cookies } = await import('next/headers')
   const cookieStore = await cookies()
 
   return createServerClient<Database>(
@@ -21,7 +21,7 @@ export async function createClient() {
               cookieStore.set(name, value, options),
             )
           } catch {
-            // setAll called from a Server Component — safe to ignore
+            // Called from a Server Component — safe to ignore
           }
         },
       },
@@ -29,8 +29,8 @@ export async function createClient() {
   )
 }
 
-// Bypasses RLS — use ONLY in webhook handlers and background jobs
-// that run outside a user session (Stripe, Retell, Resend webhooks).
+// Bypasses RLS — use ONLY in webhook handlers and background jobs.
+// No cookies import — safe to call from the WebSocket server at startup.
 export function createServiceClient() {
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

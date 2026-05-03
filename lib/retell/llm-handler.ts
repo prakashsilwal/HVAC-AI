@@ -13,7 +13,7 @@ import { createCalendarAppointment } from '@/lib/google/calendar'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// ── Transcript → Claude messages ──────────────────────────────
+// ── Transcript → AI messages ─────────────────────────────────
 function buildClaudeMessages(transcript: RetellTranscriptTurn[]): Anthropic.MessageParam[] {
   return transcript.map((turn) => ({
     role: turn.role === 'agent' ? 'assistant' : 'user',
