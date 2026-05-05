@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
 import type { CallInsert, Json } from '@/lib/database.types'
+import { sendMissedCallNotification } from '@/lib/resend/emails'
 
 // ── Retell webhook payload types ─────────────────────────────
 type RetellTranscriptTurn = {
@@ -183,6 +184,48 @@ export async function POST(request: NextRequest) {
     if (callError) {
       console.error('[retell/webhook] call_ended upsert error:', callError)
       return NextResponse.json({ error: callError.message }, { status: 500 })
+    }
+
+    // Mark as missed if call was too short or caller hung up before engaging
+    const isMissed =
+      (durationSeconds !== null && durationSeconds < 15) ||
+      call.disconnection_reason === 'user_hangup' && (durationSeconds ?? 99) < 30
+
+    if (isMissed) {
+      await supabase
+        .from('calls')
+        .update({ status: 'missed' })
+        .eq('retell_call_id', call.call_id)
+
+      // Notify owner
+      try {
+        const { data: ownerProfile } = await supabase
+          .from('user_profiles')
+          .select('email, full_name')
+          .eq('business_id', businessId)
+          .eq('role', 'owner')
+          .maybeSingle()
+
+        const { data: business } = await supabase
+          .from('businesses')
+          .select('name')
+          .eq('id', businessId)
+          .maybeSingle()
+
+        if (ownerProfile?.email) {
+          sendMissedCallNotification({
+            to: ownerProfile.email,
+            ownerName: ownerProfile.full_name ?? 'there',
+            callerNumber: call.from_number ?? 'Unknown',
+            calledAt: call.end_timestamp
+              ? new Date(call.end_timestamp).toISOString()
+              : new Date().toISOString(),
+            businessName: business?.name ?? 'your business',
+          }).catch(e => console.error('[retell/webhook] sendMissedCallNotification error:', e))
+        }
+      } catch (e) {
+        console.error('[retell/webhook] missed call email error:', e)
+      }
     }
 
     console.log('[retell/webhook] call_ended saved ✅')

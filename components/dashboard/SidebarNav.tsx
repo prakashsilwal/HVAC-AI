@@ -7,9 +7,10 @@ import {
   Phone,
   CalendarDays,
   Settings,
-  Snowflake,
+  Mic,
   Zap,
   CreditCard,
+  LogOut,
 } from 'lucide-react'
 
 const nav = [
@@ -20,7 +21,17 @@ const nav = [
   { href: '/dashboard/settings', label: 'Settings',  icon: Settings },
 ]
 
-export default function SidebarNav() {
+type Props = {
+  userName: string
+  userEmail: string
+  businessName: string
+}
+
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
+export default function SidebarNav({ userName, userEmail, businessName }: Props) {
   const pathname = usePathname()
 
   return (
@@ -28,9 +39,9 @@ export default function SidebarNav() {
       {/* Logo */}
       <div className="flex h-[60px] shrink-0 items-center gap-2.5 border-b border-white/[0.06] px-5">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
-          <Snowflake className="h-4 w-4 text-white" />
+          <Mic className="h-4 w-4 text-white" />
         </div>
-        <span className="text-[15px] font-semibold tracking-tight text-white">HVAC AI</span>
+        <span className="text-[15px] font-semibold tracking-tight text-white">VoiceDesk</span>
       </div>
 
       {/* Nav items */}
@@ -57,7 +68,7 @@ export default function SidebarNav() {
         })}
       </nav>
 
-      {/* Plan badge */}
+      {/* Bottom section */}
       <div className="border-t border-white/[0.06] p-4 space-y-3">
         <div className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2.5">
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/20">
@@ -65,19 +76,26 @@ export default function SidebarNav() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-white truncate">Pro Trial</p>
-            <p className="text-[10px] text-zinc-500">14 days remaining</p>
+            <p className="text-[10px] text-zinc-500 truncate">{businessName}</p>
           </div>
         </div>
 
-        {/* User avatar */}
+        {/* User + sign out */}
         <div className="flex items-center gap-2.5 px-1">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-xs font-semibold text-white">
-            A
+            {initials(userName)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-zinc-300 truncate">Acme HVAC</p>
-            <p className="text-[10px] text-zinc-600 truncate">admin</p>
+            <p className="text-xs font-medium text-zinc-300 truncate">{userName}</p>
+            <p className="text-[10px] text-zinc-600 truncate">{userEmail}</p>
           </div>
+          <a
+            href="/api/auth/signout"
+            title="Sign out"
+            className="text-zinc-600 hover:text-zinc-300 transition"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </a>
         </div>
       </div>
     </aside>

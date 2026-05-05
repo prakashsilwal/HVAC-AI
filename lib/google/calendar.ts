@@ -2,6 +2,7 @@ import { google } from 'googleapis'
 import { getAuthenticatedClient } from './oauth'
 import type { BookAppointmentInput, BookAppointmentResult } from '@/lib/retell/tools'
 import { createServiceClient } from '@/lib/supabase/server'
+import { sendBookingConfirmation, sendNewBookingNotification } from '@/lib/resend/emails'
 
 // Duration in minutes by job type
 const JOB_DURATIONS: Record<string, number> = {
@@ -163,6 +164,55 @@ export async function createCalendarAppointment(
 
     if (error) {
       console.error('[calendar] Supabase booking insert error:', error)
+    }
+
+    // Fire emails — fetch business info + owner profile
+    try {
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('name, phone_number, owner_first_name')
+        .eq('id', resolvedBusinessId)
+        .maybeSingle()
+
+      const { data: ownerProfile } = await supabase
+        .from('user_profiles')
+        .select('email, full_name')
+        .eq('business_id', resolvedBusinessId)
+        .eq('role', 'owner')
+        .maybeSingle()
+
+      const businessName = business?.name ?? 'Your Service Provider'
+      const businessPhone = business?.phone_number ?? undefined
+      const ownerEmail = ownerProfile?.email
+      const ownerName = ownerProfile?.full_name ?? business?.owner_first_name ?? 'there'
+
+      if (input.customer_email) {
+        sendBookingConfirmation({
+          to: input.customer_email,
+          customerName: input.customer_name,
+          businessName,
+          jobType: input.job_type,
+          scheduledStart: startTime.toISOString(),
+          address: input.service_address,
+          businessPhone,
+        }).catch(e => console.error('[calendar] sendBookingConfirmation error:', e))
+      }
+
+      if (ownerEmail) {
+        sendNewBookingNotification({
+          to: ownerEmail,
+          ownerName,
+          customerName: input.customer_name,
+          customerPhone: input.customer_phone,
+          jobType: input.job_type,
+          scheduledStart: startTime.toISOString(),
+          address: input.service_address,
+          notes: input.notes,
+          estimatedValue,
+        }).catch(e => console.error('[calendar] sendNewBookingNotification error:', e))
+      }
+    } catch (emailErr) {
+      console.error('[calendar] email dispatch error:', emailErr)
     }
 
     const formattedDate = startTime.toLocaleDateString('en-US', {

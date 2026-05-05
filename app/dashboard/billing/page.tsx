@@ -1,15 +1,14 @@
 import { CreditCard, Zap, CheckCircle2, AlertCircle, Calendar } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import { getBusinessId } from '@/lib/auth/business'
 
-const BUSINESS_ID = '00000000-0000-0000-0000-000000000001'
-
-async function getSubscription() {
+async function getSubscription(businessId: string) {
   const supabase = createServiceClient()
   const { data } = await supabase
     .from('subscriptions')
     .select('*')
-    .eq('business_id', BUSINESS_ID)
+    .eq('business_id', businessId)
     .maybeSingle()
   return data
 }
@@ -26,7 +25,8 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{ success?: string }>
 }) {
-  const [sub, sp] = await Promise.all([getSubscription(), searchParams])
+  const businessId = await getBusinessId()
+  const [sub, sp] = await Promise.all([getSubscription(businessId), searchParams])
 
   const isActive = sub?.status === 'active' || sub?.status === 'trialing'
   const isTrial = sub?.status === 'trialing'

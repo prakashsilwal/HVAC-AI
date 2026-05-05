@@ -1,8 +1,7 @@
 import { Phone } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/server'
 import CallsList from '@/components/dashboard/CallsList'
-
-const BUSINESS_ID = '00000000-0000-0000-0000-000000000001'
+import { getBusinessId } from '@/lib/auth/business'
 
 async function getAllCalls(businessId: string) {
   const supabase = createServiceClient()
@@ -16,7 +15,8 @@ async function getAllCalls(businessId: string) {
 }
 
 export default async function CallsPage() {
-  const calls = await getAllCalls(BUSINESS_ID)
+  const businessId = await getBusinessId()
+  const calls = await getAllCalls(businessId)
 
   return (
     <div className="flex flex-col min-h-full">

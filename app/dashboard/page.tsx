@@ -3,8 +3,7 @@ import { Phone, TrendingUp, CalendarCheck, DollarSign, Mic } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/server'
 import StatsCard from '@/components/dashboard/StatsCard'
 import CallsList from '@/components/dashboard/CallsList'
-
-const BUSINESS_ID = '00000000-0000-0000-0000-000000000001'
+import { getBusinessId } from '@/lib/auth/business'
 
 async function getStats(businessId: string) {
   const supabase = createServiceClient()
@@ -38,9 +37,10 @@ async function getRecentCalls(businessId: string) {
 }
 
 export default async function DashboardPage() {
+  const businessId = await getBusinessId()
   const [stats, calls] = await Promise.all([
-    getStats(BUSINESS_ID),
-    getRecentCalls(BUSINESS_ID),
+    getStats(businessId),
+    getRecentCalls(businessId),
   ])
 
   return (

@@ -14,7 +14,7 @@ import { createCalendarAppointment } from '@/lib/google/calendar'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ── Transcript → AI messages ─────────────────────────────────
-function buildClaudeMessages(transcript: RetellTranscriptTurn[]): Anthropic.MessageParam[] {
+function buildMessages(transcript: RetellTranscriptTurn[]): Anthropic.MessageParam[] {
   return transcript.map((turn) => ({
     role: turn.role === 'agent' ? 'assistant' : 'user',
     content: turn.content,
@@ -56,7 +56,7 @@ async function handleResponseRequired(
     state.timezone,
   )
 
-  let messages: Anthropic.MessageParam[] = buildClaudeMessages(transcript)
+  let messages: Anthropic.MessageParam[] = buildMessages(transcript)
 
   // Loop to handle tool calls (book_appointment may be called once per turn)
   for (let iteration = 0; iteration < 3; iteration++) {
@@ -108,7 +108,7 @@ async function handleResponseRequired(
       )
       console.log('[llm] book_appointment result:', JSON.stringify(toolResult))
 
-      // Append assistant message + tool result and loop for Claude's spoken response
+      // Append assistant message + tool result and re-run for the agent's spoken response
       messages = [
         ...messages,
         { role: 'assistant', content: finalMessage.content },

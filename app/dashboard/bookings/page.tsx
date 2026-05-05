@@ -1,15 +1,14 @@
 import { CalendarDays, Clock, DollarSign, MapPin, Phone, ArrowUpRight } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import { getBusinessId } from '@/lib/auth/business'
 
-const BUSINESS_ID = '00000000-0000-0000-0000-000000000001'
-
-async function getBookings() {
+async function getBookings(businessId: string) {
   const supabase = createServiceClient()
   const { data } = await supabase
     .from('bookings')
     .select('*, calls(caller_name, caller_number)')
-    .eq('business_id', BUSINESS_ID)
+    .eq('business_id', businessId)
     .order('scheduled_start', { ascending: true })
   return data ?? []
 }
@@ -61,7 +60,8 @@ const jobColors: Record<string, string> = {
 }
 
 export default async function BookingsPage() {
-  const bookings = await getBookings()
+  const businessId = await getBusinessId()
+  const bookings = await getBookings(businessId)
 
   const totalRevenue = bookings.reduce((sum, b) => sum + (b.estimated_value ?? 0), 0)
   const upcoming = bookings.filter(b => b.scheduled_start && new Date(b.scheduled_start) > new Date()).length

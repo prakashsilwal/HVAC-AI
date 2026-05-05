@@ -1,16 +1,15 @@
 import { Settings, CalendarDays, Bot, Building2, CheckCircle2, AlertCircle, XCircle } from 'lucide-react'
 import { createServiceClient } from '@/lib/supabase/server'
+import { getBusinessId } from '@/lib/auth/business'
 
-const DEV_BUSINESS_ID = '00000000-0000-0000-0000-000000000001'
-
-async function isCalendarConnected(): Promise<boolean> {
+async function getBusinessData(businessId: string) {
   const supabase = createServiceClient()
   const { data } = await supabase
     .from('businesses')
-    .select('gcal_token')
-    .eq('id', DEV_BUSINESS_ID)
+    .select('name, service_area, owner_first_name, gcal_token')
+    .eq('id', businessId)
     .single()
-  return !!data?.gcal_token
+  return data
 }
 
 export default async function SettingsPage({
@@ -18,10 +17,12 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<{ gcal_connected?: string; gcal_error?: string }>
 }) {
-  const [calConnected, sp] = await Promise.all([
-    isCalendarConnected(),
+  const businessId = await getBusinessId()
+  const [biz, sp] = await Promise.all([
+    getBusinessData(businessId),
     searchParams,
   ])
+  const calConnected = !!biz?.gcal_token
 
   return (
     <div className="flex flex-col min-h-full">
@@ -61,10 +62,10 @@ export default async function SettingsPage({
           </div>
           <div className="p-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
             {[
-              { label: 'Business Name', value: 'Acme HVAC' },
-              { label: 'Service Area',  value: 'Charlotte, NC' },
+              { label: 'Business Name', value: biz?.name ?? '—' },
+              { label: 'Service Area',  value: biz?.service_area ?? '—' },
               { label: 'Timezone',      value: 'America/New_York' },
-              { label: 'Owner',         value: 'John' },
+              { label: 'Owner',         value: biz?.owner_first_name ?? '—' },
             ].map(({ label, value }) => (
               <div key={label}>
                 <label className="block text-xs font-medium text-zinc-500 mb-1.5">{label}</label>
