@@ -9,12 +9,14 @@ import {
   Settings,
   Snowflake,
   Zap,
+  CreditCard,
 } from 'lucide-react'
 
 const nav = [
   { href: '/dashboard',          label: 'Overview',  icon: LayoutDashboard },
   { href: '/dashboard/calls',    label: 'Calls',     icon: Phone },
   { href: '/dashboard/bookings', label: 'Bookings',  icon: CalendarDays },
+  { href: '/dashboard/billing',  label: 'Billing',   icon: CreditCard },
   { href: '/dashboard/settings', label: 'Settings',  icon: Settings },
 ]
 

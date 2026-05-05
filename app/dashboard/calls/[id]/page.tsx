@@ -6,14 +6,21 @@ import { createServiceClient } from '@/lib/supabase/server'
 type TranscriptTurn = { role: 'agent' | 'user'; content: string }
 
 async function getCallData(id: string) {
-  console.log('[call-detail] fetching id:', id)
   const supabase = createServiceClient()
-  const [callRes, transcriptRes, bookingRes] = await Promise.all([
-    supabase.from('calls').select('*').eq('id', id).single(),
-    supabase.from('transcripts').select('*').eq('call_id', id).maybeSingle(),
-    supabase.from('bookings').select('*').eq('call_id', id).maybeSingle(),
+
+  // Try by Supabase UUID first, fallback to retell_call_id
+  let callRes = await supabase.from('calls').select('*').eq('id', id).maybeSingle()
+  if (!callRes.data) {
+    callRes = await supabase.from('calls').select('*').eq('retell_call_id', id).maybeSingle()
+  }
+
+  const callId = callRes.data?.id ?? id
+
+  const [transcriptRes, bookingRes] = await Promise.all([
+    supabase.from('transcripts').select('*').eq('call_id', callId).maybeSingle(),
+    supabase.from('bookings').select('*').eq('call_id', callId).maybeSingle(),
   ])
-  console.log('[call-detail] call data:', callRes.data, 'error:', callRes.error)
+
   return { call: callRes.data, transcript: transcriptRes.data, booking: bookingRes.data }
 }
 

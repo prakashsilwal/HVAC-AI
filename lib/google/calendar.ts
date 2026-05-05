@@ -78,6 +78,7 @@ export async function createCalendarAppointment(
   callId: string | null,
   timezone: string = 'America/Chicago',
 ): Promise<BookAppointmentResult> {
+  console.log('[calendar] createCalendarAppointment called', { businessId, callId, input })
   try {
     const auth = await getAuthenticatedClient(businessId)
     const calendar = google.calendar({ version: 'v3', auth })
@@ -127,11 +128,23 @@ export async function createCalendarAppointment(
     const supabase = createServiceClient()
     const estimatedValue = input.estimated_value ?? JOB_VALUES[input.job_type] ?? 350
 
+    // callId here is the Retell call ID — look up the Supabase UUID
+    const resolvedBusinessId = businessId || '00000000-0000-0000-0000-000000000001'
+    let supabaseCallId: string | null = null
+    if (callId) {
+      const { data: callRow } = await supabase
+        .from('calls')
+        .select('id')
+        .eq('retell_call_id', callId)
+        .maybeSingle()
+      supabaseCallId = callRow?.id ?? null
+    }
+
     const { data: booking, error } = await supabase
       .from('bookings')
       .insert({
-        business_id: businessId,
-        call_id: callId,
+        business_id: resolvedBusinessId,
+        call_id: supabaseCallId,
         customer_name: input.customer_name,
         customer_phone: input.customer_phone,
         customer_email: input.customer_email ?? null,

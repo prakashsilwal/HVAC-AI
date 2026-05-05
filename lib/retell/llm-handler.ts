@@ -28,7 +28,7 @@ async function executeBookAppointment(
 ) {
   return createCalendarAppointment(
     input,
-    state.businessId,
+    state.businessId || '00000000-0000-0000-0000-000000000001',
     state.callId || null,
     state.timezone,
   )
@@ -98,12 +98,15 @@ async function handleResponseRequired(
         (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
       )
 
+      console.log('[llm] tool_use detected:', toolUseBlock?.name, JSON.stringify(toolUseBlock?.input))
+
       if (!toolUseBlock || toolUseBlock.name !== 'book_appointment') break
 
       const toolResult = await executeBookAppointment(
         toolUseBlock.input as BookAppointmentInput,
         state,
       )
+      console.log('[llm] book_appointment result:', JSON.stringify(toolResult))
 
       // Append assistant message + tool result and loop for Claude's spoken response
       messages = [
