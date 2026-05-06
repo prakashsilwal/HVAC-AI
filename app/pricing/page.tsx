@@ -1,41 +1,41 @@
 import { redirect } from 'next/navigation'
-import { Check, Snowflake, Zap, Phone, Calendar, BarChart3, Shield } from 'lucide-react'
+import { Check, Mic, Zap, Phone, Calendar, BarChart3, Shield } from 'lucide-react'
 import { stripe } from '@/lib/stripe/client'
 import { createServiceClient } from '@/lib/supabase/server'
-
-const BUSINESS_ID = '00000000-0000-0000-0000-000000000001'
+import { getBusinessId } from '@/lib/auth/business'
 
 const features = [
   { icon: Phone,     text: '24/7 AI receptionist answers every call' },
   { icon: Calendar,  text: 'Auto-books appointments to Google Calendar' },
   { icon: BarChart3, text: 'Full dashboard with call analytics' },
-  { icon: Zap,       text: 'Instant SMS + email confirmations' },
+  { icon: Zap,       text: 'Instant email confirmations to customers' },
   { icon: Shield,    text: 'Never miss a lead again' },
 ]
 
 async function startCheckout() {
   'use server'
 
+  const businessId = await getBusinessId()
   const supabase = createServiceClient()
 
   const { data: business } = await supabase
     .from('businesses')
     .select('name')
-    .eq('id', BUSINESS_ID)
+    .eq('id', businessId)
     .single()
 
   const { data: existingSub } = await supabase
     .from('subscriptions')
     .select('stripe_customer_id')
-    .eq('business_id', BUSINESS_ID)
+    .eq('business_id', businessId)
     .maybeSingle()
 
   let customerId = existingSub?.stripe_customer_id ?? null
 
   if (!customerId) {
     const customer = await stripe.customers.create({
-      name: business?.name ?? 'HVAC Business',
-      metadata: { business_id: BUSINESS_ID },
+      name: business?.name ?? 'Business',
+      metadata: { business_id: businessId },
     })
     customerId = customer.id
   }
@@ -49,9 +49,9 @@ async function startCheckout() {
     phone_number_collection: { enabled: false },
     subscription_data: {
       trial_period_days: 14,
-      metadata: { business_id: BUSINESS_ID },
+      metadata: { business_id: businessId },
     },
-    metadata: { business_id: BUSINESS_ID },
+    metadata: { business_id: businessId },
   })
 
   redirect(session.url!)
@@ -63,9 +63,9 @@ export default function PricingPage() {
       {/* Logo */}
       <div className="flex items-center gap-2.5 mb-12">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-          <Snowflake className="h-4 w-4 text-white" />
+          <Mic className="h-4 w-4 text-white" />
         </div>
-        <span className="text-lg font-semibold text-white tracking-tight">HVAC AI</span>
+        <span className="text-lg font-semibold text-white tracking-tight">VoiceDesk</span>
       </div>
 
       {/* Headline */}
@@ -75,7 +75,7 @@ export default function PricingPage() {
           <span className="text-blue-400">Always on. Never misses.</span>
         </h1>
         <p className="mt-4 text-zinc-400 text-lg">
-          Sarah answers every call, books appointments, and sends confirmations — while you&apos;re out on the job.
+          Your AI receptionist answers every call, books appointments, and sends confirmations — automatically.
         </p>
       </div>
 
@@ -84,13 +84,11 @@ export default function PricingPage() {
         <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-blue-500/30 to-purple-500/10" />
 
         <div className="relative rounded-2xl border border-white/10 bg-zinc-900 p-8 shadow-2xl">
-          {/* Trial badge */}
           <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 mb-6">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             14-day free trial — no credit card charged today
           </div>
 
-          {/* Price */}
           <div className="mb-6">
             <div className="flex items-end gap-2">
               <span className="text-5xl font-bold text-white">$249</span>
@@ -99,7 +97,6 @@ export default function PricingPage() {
             <p className="text-sm text-zinc-500 mt-1">After trial. Cancel anytime.</p>
           </div>
 
-          {/* Features */}
           <ul className="space-y-3 mb-8">
             {features.map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3">
@@ -111,7 +108,6 @@ export default function PricingPage() {
             ))}
           </ul>
 
-          {/* CTA — server action form, works without JS */}
           <form action={startCheckout}>
             <button
               type="submit"
