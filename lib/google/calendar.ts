@@ -1,6 +1,27 @@
 import { google } from 'googleapis'
 import { getAuthenticatedClient } from './oauth'
-import type { BookAppointmentInput, BookAppointmentResult } from '@/lib/retell/tools'
+// Local type for the legacy HVAC calendar booking (not used by salon flow)
+type BookAppointmentInput = {
+  customer_name: string
+  customer_phone: string
+  customer_email?: string
+  service_address: string
+  job_type: string
+  urgency: 'emergency' | 'soon' | 'scheduled'
+  preferred_date?: string
+  preferred_time_window?: string
+  notes?: string
+  estimated_value?: number
+}
+type BookAppointmentResult = {
+  success: boolean
+  booking_id?: string
+  scheduled_start?: string
+  scheduled_end?: string
+  calendar_event_id?: string
+  confirmation_message: string
+  error?: string
+}
 import { createServiceClient } from '@/lib/supabase/server'
 import { sendBookingConfirmation, sendNewBookingNotification } from '@/lib/resend/emails'
 

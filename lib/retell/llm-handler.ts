@@ -9,7 +9,7 @@ import type {
   CallState,
 } from './types'
 import type { BookAppointmentInput } from './tools'
-import { createCalendarAppointment } from '@/lib/google/calendar'
+import { createPendingBooking } from '@/lib/salon/booking'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -26,11 +26,10 @@ async function executeBookAppointment(
   input: BookAppointmentInput,
   state: CallState,
 ) {
-  return createCalendarAppointment(
+  return createPendingBooking(
     input,
     state.businessId || '00000000-0000-0000-0000-000000000001',
     state.callId || null,
-    state.timezone,
   )
 }
 
@@ -51,8 +50,6 @@ async function handleResponseRequired(
 ): Promise<void> {
   const systemPrompt = buildSystemPrompt(
     state.businessName,
-    state.ownerFirstName,
-    state.serviceArea,
     state.timezone,
   )
 
@@ -145,9 +142,9 @@ export function handleRetellConnection(ws: WebSocket): void {
   const state: CallState = {
     callId: '',
     businessId: '',
-    businessName: 'the HVAC company',
-    ownerFirstName: 'the owner',
-    serviceArea: 'your area',
+    businessName: 'Diamond Threading',
+    ownerFirstName: '',
+    serviceArea: '',
     timezone: 'America/Chicago',
     currentAbortController: null,
   }

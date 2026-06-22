@@ -181,6 +181,88 @@ export async function sendNewBookingNotification(props: NewBookingNotificationPr
   else console.log('[resend] new booking notification sent to:', to)
 }
 
+// ── Pending booking request → sent to salon owner ────────────
+type PendingBookingNotificationProps = {
+  to: string
+  ownerName: string
+  customerName: string
+  customerPhone: string
+  serviceType: string
+  preferredDate?: string
+  preferredTime?: string
+  notes?: string
+  language?: string
+}
+
+export async function sendPendingBookingNotification(props: PendingBookingNotificationProps) {
+  const { to, ownerName, customerName, customerPhone, serviceType, preferredDate, preferredTime, notes, language } = props
+
+  const preferredWhen = [preferredDate, preferredTime].filter(Boolean).join(' · ') || 'Not specified'
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="max-width:520px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+
+    <div style="background:#7c3aed;padding:28px 32px">
+      <p style="margin:0;color:#ddd6fe;font-size:12px;text-transform:uppercase;letter-spacing:1px">New Appointment Request</p>
+      <h1 style="margin:8px 0 0;color:#fff;font-size:22px;font-weight:700">📋 Needs Your Confirmation</h1>
+    </div>
+
+    <div style="padding:32px">
+      <p style="margin:0 0 20px;color:#3f3f46;font-size:15px">Hi ${ownerName}, a customer just requested an appointment through your AI receptionist. Please confirm or suggest an alternate time.</p>
+
+      <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:20px;margin-bottom:24px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="padding:6px 0;color:#7c3aed;font-size:13px;width:120px">Customer</td>
+            <td style="padding:6px 0;color:#18181b;font-size:13px;font-weight:600">${customerName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#7c3aed;font-size:13px">Phone</td>
+            <td style="padding:6px 0;color:#18181b;font-size:13px;font-weight:600">${customerPhone}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#7c3aed;font-size:13px">Service</td>
+            <td style="padding:6px 0;color:#18181b;font-size:13px;font-weight:600">${serviceType}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#7c3aed;font-size:13px">Requested</td>
+            <td style="padding:6px 0;color:#18181b;font-size:13px;font-weight:600">${preferredWhen}</td>
+          </tr>
+          ${language ? `
+          <tr>
+            <td style="padding:6px 0;color:#7c3aed;font-size:13px">Language</td>
+            <td style="padding:6px 0;color:#18181b;font-size:13px;font-weight:600">${language.charAt(0).toUpperCase() + language.slice(1)}</td>
+          </tr>` : ''}
+          ${notes ? `
+          <tr>
+            <td style="padding:6px 0;color:#7c3aed;font-size:13px;vertical-align:top">Notes</td>
+            <td style="padding:6px 0;color:#3f3f46;font-size:13px">${notes}</td>
+          </tr>` : ''}
+        </table>
+      </div>
+
+      <p style="margin:0 0 8px;color:#3f3f46;font-size:14px;font-weight:600">Action needed: Log in to your dashboard to confirm or reschedule this appointment.</p>
+      <p style="margin:0;color:#71717a;font-size:13px">The customer is waiting for a confirmation message.</p>
+    </div>
+  </div>
+</body>
+</html>`
+
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to,
+    subject: `New Appointment Request — ${customerName} · ${serviceType}`,
+    html,
+  })
+
+  if (error) console.error('[resend] pending booking notification failed:', error)
+  else console.log('[resend] pending booking notification sent to:', to)
+}
+
 // ── Missed call alert → sent to business owner ────────────────
 export async function sendMissedCallNotification(props: MissedCallNotificationProps) {
   const { to, ownerName, callerNumber, callerName, calledAt, businessName } = props

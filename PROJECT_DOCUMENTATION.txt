@@ -1,0 +1,932 @@
+================================================================================
+                    VOICEDESK — DEVELOPER DOCUMENTATION
+                    Written for: New Developer Onboarding
+                    Date: June 2026
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1.  What Is This Project?
+2.  Tech Stack Overview
+3.  How to Run Locally
+4.  Directory Structure
+5.  Authentication & User Flow
+6.  Database Schema
+7.  Third-Party Integrations (All Tools Used)
+8.  How AI Voice Calling Works (End-to-End)
+9.  How Bookings Work
+10. How Billing & Subscriptions Work
+11. Key API Routes & Endpoints
+12. Environment Variables
+13. Scripts & Utilities
+14. Multi-Tenancy & Security
+
+
+================================================================================
+1. WHAT IS THIS PROJECT?
+================================================================================
+
+VoiceDesk is a multi-tenant AI Receptionist SaaS platform. Small businesses
+(salons, HVAC companies, and others) use this platform to get a 24/7 automated
+AI phone receptionist that:
+
+  - Answers inbound phone calls automatically
+  - Has a real conversation with the caller using AI
+  - Books appointments during the call
+  - Sends email notifications to the business owner and customer
+  - Tracks every call with transcripts, sentiment, and summaries
+  - Provides a web dashboard for the business owner to manage everything
+
+Business owners sign up, connect their Google Calendar (optional), configure
+their services and hours, and Retell AI routes inbound calls to our system.
+The caller hears a real voice (synthesized) and our Claude AI handles the
+conversation intelligently.
+
+The platform charges a monthly subscription fee. Currently supports:
+  - Salon businesses (threading, waxing, facials)
+  - HVAC companies (legacy, calendar-based booking)
+
+The app was originally built for HVAC ("hvac-voice-ai" repo name) but has
+evolved into a generic white-label platform. Do not be confused by the folder
+name.
+
+
+================================================================================
+2. TECH STACK OVERVIEW
+================================================================================
+
+  Layer             Technology
+  ─────────────────────────────────────────────────────────────────────────────
+  Framework         Next.js 16 (App Router, Server Actions, Server Components)
+  Frontend          React 19, Tailwind CSS 4
+  Backend           Node.js with custom HTTP + WebSocket server (server.ts)
+  Database          Supabase (Postgres) with Row-Level Security (RLS)
+  AI / LLM          Anthropic Claude (claude-sonnet-4-6)
+  Voice AI          Retell AI (WebSocket-based, handles phone calls)
+  Calendar          Google Calendar API (OAuth2)
+  Email             Resend
+  Payments          Stripe (subscriptions + metered billing)
+  Auth              Supabase Auth (email/password) + custom JWT/cookie sessions
+  Real-time         ws (Node.js WebSocket library) for Retell LLM connection
+  Styling           Tailwind CSS with utility classes
+
+
+================================================================================
+3. HOW TO RUN LOCALLY
+================================================================================
+
+Prerequisites:
+  - Node.js 20+
+  - A Supabase project (free tier works)
+  - Retell AI account
+  - Anthropic API key
+  - Stripe account (test mode)
+  - Resend account
+  - Google Cloud project with Calendar API enabled
+
+Steps:
+  1. Clone the repo
+  2. Copy .env.example to .env.local and fill in all variables (see Section 12)
+  3. Run: npm install
+  4. Push Supabase migrations:
+       npx supabase db push
+  5. Run Stripe product setup (one time only):
+       npx tsx scripts/setup-stripe-products.ts
+  6. Start the dev server:
+       npm run dev
+  7. The app runs at http://localhost:3000
+
+For Retell to reach your local WebSocket, use a tunnel like ngrok:
+  ngrok http 3000
+Then set your Retell agent's LLM WebSocket URL to:
+  wss://your-ngrok-url.ngrok.io/api/retell/llm
+
+
+================================================================================
+4. DIRECTORY STRUCTURE
+================================================================================
+
+/hvac-voice-ai
+├── app/                          Next.js App Router (all pages + API routes)
+│   ├── api/
+│   │   ├── auth/
+│   │   │   ├── callback/         Supabase auth code exchange (OAuth redirect)
+│   │   │   ├── signout/          Sign out handler
+│   │   │   └── google/
+│   │   │       ├── connect/      Starts Google OAuth flow
+│   │   │       └── callback/     Exchanges code for Google tokens
+│   │   ├── webhooks/
+│   │   │   └── retell/           Receives call events from Retell
+│   │   └── stripe/
+│   │       └── webhook/          Receives billing events from Stripe
+│   ├── dashboard/
+│   │   ├── page.tsx              Main overview (stats, today's bookings)
+│   │   ├── calls/                Call list with filters, call detail modal
+│   │   ├── bookings/             Appointment list, confirm/cancel actions
+│   │   ├── settings/             Business config, Google Calendar connect
+│   │   ├── billing/              Subscription info, upgrade, cancel
+│   │   └── layout.tsx            Sidebar nav + auth check wrapper
+│   ├── onboarding/               Step-by-step setup after signup
+│   ├── login/                    Login page (email/password)
+│   ├── signup/                   Registration + business creation
+│   ├── pricing/                  Public pricing page
+│   ├── layout.tsx                Root layout (fonts, metadata)
+│   └── page.tsx                  Landing / marketing page
+│
+├── lib/                          Shared server-side utilities
+│   ├── auth/
+│   │   └── business.ts           Resolves current user → business_id
+│   ├── google/
+│   │   ├── oauth.ts              Google OAuth flows, token refresh
+│   │   └── calendar.ts           Creates Google Calendar events (HVAC)
+│   ├── supabase/
+│   │   ├── client.ts             Browser Supabase client
+│   │   └── server.ts             Server + service role Supabase clients
+│   ├── retell/
+│   │   ├── llm-handler.ts        WebSocket handler: Claude ↔ Retell
+│   │   ├── system-prompt.ts      The AI agent's personality + instructions
+│   │   ├── tools.ts              Claude tool definitions (book_appointment)
+│   │   └── types.ts              TypeScript types for Retell protocol
+│   ├── salon/
+│   │   └── booking.ts            Creates pending salon bookings in DB
+│   ├── stripe/
+│   │   └── client.ts             Stripe SDK client
+│   ├── resend/
+│   │   ├── client.ts             Resend SDK client
+│   │   └── emails.ts             All email templates + send functions
+│   └── database.types.ts         Supabase auto-generated TypeScript types
+│
+├── components/
+│   └── dashboard/
+│       ├── StatsCard.tsx         Reusable stat card (calls, revenue, etc.)
+│       ├── CallsList.tsx         Filterable call history list
+│       └── SidebarNav.tsx        Left-side navigation
+│
+├── supabase/
+│   └── migrations/
+│       ├── 20260430000000_initial_schema.sql   All core tables + RLS
+│       └── 20260620000000_salon_service_types.sql  Salon-specific enums
+│
+├── scripts/
+│   ├── setup-stripe-products.ts  One-time: creates Stripe products
+│   └── test-websocket.ts         Simulates a Retell call locally
+│
+├── server.ts                     Custom Node.js HTTP + WebSocket server
+├── middleware.ts                 Route protection (auth redirects)
+├── package.json
+├── tsconfig.json
+└── next.config.ts
+
+
+================================================================================
+5. AUTHENTICATION & USER FLOW
+================================================================================
+
+We use Supabase Auth with email/password. Sessions are cookie-based using
+the @supabase/ssr package.
+
+SIGN UP FLOW:
+  1. User goes to /signup, enters email + password + business name
+  2. Server Action calls supabase.auth.signUp()
+  3. Two rows created simultaneously:
+       - businesses table: { name, owner_user_id }
+       - user_profiles table: { user_id, business_id, role: 'owner' }
+  4. User auto-signed in, redirected to /onboarding
+
+ONBOARDING FLOW:
+  1. Business fills in: phone number, timezone, owner first name, service area
+  2. Sets up business hours (which days, open/close times)
+  3. Optionally connects Google Calendar via OAuth
+  4. Redirected to /dashboard on completion
+
+LOGIN FLOW:
+  1. User goes to /login, enters email + password
+  2. Server Action calls supabase.auth.signInWithPassword()
+  3. Redirected to /dashboard on success
+
+SESSION MANAGEMENT:
+  - middleware.ts runs on every request
+  - Uses @supabase/ssr to read session from cookies
+  - Unauthenticated users visiting /dashboard/* → redirected to /login
+  - Logged-in users visiting /login or /signup → redirected to /dashboard
+
+IMPORTANT NOTE ON SERVICE ROLE:
+  - Regular users use NEXT_PUBLIC_SUPABASE_ANON_KEY (respects RLS)
+  - Webhook handlers (Retell, Stripe) use SUPABASE_SERVICE_ROLE_KEY
+    because they are not authenticated as any user, but they need to
+    write data to the database. Service role bypasses RLS entirely.
+  - Never expose SUPABASE_SERVICE_ROLE_KEY to the browser.
+
+GOOGLE CALENDAR OAUTH:
+  - Separate from Supabase auth
+  - Flow: /api/auth/google/connect → Google consent screen → /api/auth/google/callback
+  - Tokens stored in businesses.gcal_token (JSONB) in the DB
+  - lib/google/oauth.ts handles token refresh automatically
+
+
+================================================================================
+6. DATABASE SCHEMA
+================================================================================
+
+All tables live in Supabase Postgres. Here is every table and its purpose.
+See supabase/migrations/ for exact column definitions and RLS policies.
+
+TABLE: businesses
+  The core record for each business on the platform.
+  Columns:
+    id                  UUID (primary key)
+    owner_user_id       FK → auth.users (Supabase's internal users table)
+    name                Business name (e.g., "Diamond Threading")
+    phone_number        Business phone number
+    timezone            IANA timezone string (e.g., "America/New_York")
+    retell_agent_id     Retell agent configured for this business
+    retell_phone_id     Retell phone number ID
+    gcal_token          JSONB — encrypted Google OAuth tokens
+    business_hours      JSONB — { monday: { open: "09:00", close: "18:00" }, ... }
+    afterhours_mode     Enum: 'takemessage' | 'book' | 'off'
+    service_area        e.g., "San Francisco Bay Area"
+    owner_first_name    Used in AI greeting (e.g., "Hi, this is Alex's assistant")
+
+TABLE: user_profiles
+  Links Supabase auth users to a business.
+  Columns:
+    id          UUID, FK → auth.users
+    full_name   User's display name
+    email       User's email
+    business_id FK → businesses
+    role        Enum: 'owner' | 'admin'
+
+TABLE: subscriptions
+  One row per business. Tracks Stripe subscription state.
+  Columns:
+    id                      UUID
+    business_id             FK → businesses
+    stripe_customer_id      Stripe customer ID (cus_...)
+    stripe_subscription_id  Stripe subscription ID (sub_...)
+    status                  'trialing' | 'active' | 'past_due' | 'canceled' | etc.
+    plan                    e.g., 'pro_249'
+    trial_ends_at           When the free trial expires
+    current_period_end      When the current billing period ends
+    cancel_at_period_end    Boolean — user requested cancellation
+    stripe_price_id         Which Stripe price they're on
+
+TABLE: calls
+  One row per inbound phone call.
+  Columns:
+    id                UUID
+    business_id       FK → businesses
+    retell_call_id    Unique string from Retell (used for webhook matching)
+    caller_number     Caller's phone number
+    caller_name       Caller's name (extracted by AI)
+    started_at        Timestamp when call began
+    ended_at          Timestamp when call ended
+    duration_seconds  How long the call lasted
+    status            'registered' | 'ongoing' | 'completed' | 'missed' | 'voicemail' | 'error'
+    call_type         'inbound' | 'outbound'
+    sentiment         'positive' | 'neutral' | 'frustrated'
+    job_type          What the caller wanted (HVAC types + salon types + 'other')
+    urgency           'emergency' | 'soon' | 'scheduled'
+    estimated_value   Revenue estimate for the job
+    recording_url     Retell audio recording link
+    summary           AI-generated plain English summary
+    appointment_booked Boolean — did we book an appointment?
+    retell_metadata   JSONB — raw data from Retell
+
+TABLE: transcripts
+  One row per call. Stores the full conversation.
+  Columns:
+    id          UUID
+    call_id     FK → calls (unique — one transcript per call)
+    business_id FK → businesses
+    turns       JSONB array: [{ role: 'agent'|'user', content: '...', timestamp: '...' }]
+    full_text   Plain text (for full-text search)
+
+TABLE: bookings
+  One row per appointment booked.
+  Columns:
+    id                UUID
+    call_id           FK → calls (nullable — booking can exist without call)
+    business_id       FK → businesses
+    customer_name     Customer's full name
+    customer_phone    Customer's phone number
+    customer_email    Customer's email (optional)
+    customer_address  Customer's address (HVAC only; nullable for salons)
+    job_type          What service was booked
+    urgency           'emergency' | 'soon' | 'scheduled'
+    notes             Free text notes / preferred time window for salons
+    scheduled_start   ISO datetime for appointment start
+    scheduled_end     ISO datetime for appointment end
+    calendar_event_id Google Calendar event ID (HVAC only)
+    status            'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+    estimated_value   Revenue estimate
+
+TABLE: email_sequences
+  Drip email campaign for trial users.
+  Columns:
+    id          UUID
+    business_id FK → businesses
+    email       Recipient email
+    step        Which drip step (0=welcome, then days 1,3,7,10,12,14)
+    trial_start When the trial started
+    converted   Boolean — did they subscribe?
+    unsubscribed Boolean — opted out?
+    last_sent_at Timestamp of last email sent
+
+TABLE: notifications
+  Audit log of every notification sent.
+  Columns:
+    id                  UUID
+    business_id         FK → businesses
+    call_id             FK → calls (nullable)
+    booking_id          FK → bookings (nullable)
+    channel             'email' | 'sms'
+    type                Type of notification (call_summary, missed_call, etc.)
+    to_address          Recipient email/phone
+    subject             Email subject
+    body                Email body
+    status              'pending' | 'sent' | 'delivered' | 'failed'
+    provider_message_id Resend message ID
+    sent_at             When it was sent
+
+ROW-LEVEL SECURITY (RLS) OVERVIEW:
+  Every table has RLS policies. The key function is:
+    auth_business_id() — resolves auth.uid() → business_id
+
+  This means all queries from the browser are automatically filtered to only
+  show data for the logged-in user's business. No business can see another
+  business's data. Webhooks bypass this using the service role client.
+
+
+================================================================================
+7. THIRD-PARTY INTEGRATIONS (ALL TOOLS USED)
+================================================================================
+
+─────────────────────────────────────────────────────────────────────────────
+A. RETELL AI
+─────────────────────────────────────────────────────────────────────────────
+Purpose: Handles the actual phone call infrastructure
+  - Provides a real phone number
+  - Answers inbound calls
+  - Converts speech to text (caller's voice → text)
+  - Converts text to speech (AI response → voice that caller hears)
+  - Sends us the real-time transcript via WebSocket
+
+How it connects to us:
+  - In the Retell dashboard, you configure the agent's "LLM WebSocket URL"
+    to point to our server: wss://yourdomain.com/api/retell/llm
+  - When a call comes in, Retell opens a WebSocket connection to our server
+  - Our server (server.ts) handles the WebSocket and passes it to
+    lib/retell/llm-handler.ts
+
+What Retell sends us (WebSocket messages):
+  1. call_details    — sent first, contains business metadata
+  2. response_required — sent when caller finishes speaking (needs a reply)
+  3. reminder_required — sent if caller is silent (AI should re-engage)
+  4. call_ended      — sent when call hangs up
+
+What we send Retell (WebSocket messages):
+  - response_required_ack  — acknowledge we got the request
+  - response                — our text response (streamed in chunks)
+  - response_end            — signals we're done with our turn
+
+After the call, Retell sends HTTP webhooks to /api/webhooks/retell:
+  - call_ended      — includes recording URL and transcript
+  - call_analyzed   — includes sentiment analysis
+
+Key files:
+  - server.ts                  Sets up WebSocket server
+  - lib/retell/llm-handler.ts  Main WebSocket logic
+  - lib/retell/types.ts        TypeScript types for Retell protocol
+  - app/api/webhooks/retell/   HTTP webhook handler
+
+Env vars: RETELL_API_KEY, RETELL_WEBHOOK_SECRET
+
+─────────────────────────────────────────────────────────────────────────────
+B. ANTHROPIC CLAUDE (claude-sonnet-4-6)
+─────────────────────────────────────────────────────────────────────────────
+Purpose: The AI brain that decides what to say on every call
+
+How it works:
+  - When Retell sends us a response_required message with the caller's words,
+    we build a messages array (conversation history) and send it to Claude
+  - Claude's response is streamed back (token by token)
+  - We forward each token to Retell as it arrives (real-time voice)
+  - If caller interrupts, we abort the Claude request immediately
+
+The system prompt (lib/retell/system-prompt.ts) tells Claude:
+  - Who the business is and what they do
+  - Their hours, services, and pricing
+  - How to greet callers (English + Spanish)
+  - When and how to book appointments
+  - Tone and behavior guidelines
+  - What to do after hours
+
+Tool Use (Claude function calling):
+  - Claude has one tool available: book_appointment
+  - When Claude decides to book, it outputs a tool call instead of text
+  - Our handler executes the booking logic, then sends the result back to Claude
+  - Claude then generates a spoken confirmation message
+
+Dynamic variables passed per call:
+  - business_id        UUID of the business being called
+  - business_name      e.g., "Diamond Threading"
+  - owner_first_name   Used in greeting
+  - service_area       e.g., "San Francisco, CA"
+  - timezone           e.g., "America/New_York"
+
+Key files:
+  - lib/retell/llm-handler.ts   Claude API calls + streaming
+  - lib/retell/system-prompt.ts The AI's instructions
+  - lib/retell/tools.ts         book_appointment tool definition
+
+Env vars: ANTHROPIC_API_KEY
+
+─────────────────────────────────────────────────────────────────────────────
+C. SUPABASE
+─────────────────────────────────────────────────────────────────────────────
+Purpose: Database + Authentication
+
+What we use it for:
+  - Postgres database for all app data
+  - Auth (email/password sign in, session management via cookies)
+  - Row-Level Security to isolate businesses from each other
+
+Two clients:
+  - lib/supabase/client.ts  → Browser client (uses ANON key, respects RLS)
+  - lib/supabase/server.ts  → Server client (uses SERVICE_ROLE key for webhooks)
+
+Migrations:
+  - supabase/migrations/ contains all schema changes
+  - Run: npx supabase db push
+
+Env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          SUPABASE_SERVICE_ROLE_KEY
+
+─────────────────────────────────────────────────────────────────────────────
+D. GOOGLE CALENDAR API
+─────────────────────────────────────────────────────────────────────────────
+Purpose: Sync appointments to the business owner's Google Calendar (HVAC)
+
+How it works:
+  1. Business owner goes to /dashboard/settings → "Connect Google Calendar"
+  2. We redirect to Google OAuth consent screen (lib/google/oauth.ts)
+  3. After consent, Google sends a code to /api/auth/google/callback
+  4. We exchange the code for access + refresh tokens
+  5. Tokens are stored in businesses.gcal_token (JSONB)
+  6. When a booking is created, lib/google/calendar.ts creates a calendar event
+  7. Tokens are auto-refreshed when expired
+
+Event details we create:
+  - Title: "HVAC Service - [Job Type]"
+  - Description: Customer name, phone, address, notes
+  - Color-coded by urgency (red = emergency, yellow = soon, green = scheduled)
+  - Email reminders at 24h and 1h before
+
+Note: This is currently HVAC-only. Salons use a "pending" booking model
+instead (no calendar sync yet).
+
+Key files:
+  - lib/google/oauth.ts    OAuth client, token exchange, refresh
+  - lib/google/calendar.ts Create calendar events
+
+Env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+
+─────────────────────────────────────────────────────────────────────────────
+E. STRIPE
+─────────────────────────────────────────────────────────────────────────────
+Purpose: Subscription billing
+
+Plan structure (created via scripts/setup-stripe-products.ts):
+  - Starter:  $149/mo, 200 included calls, $0.50 per overage call
+  - Pro:      $349/mo, 600 included calls, $0.40 per overage call
+  - Business: $799/mo, 2000 included calls, $0.30 per overage call
+
+Each plan has two Stripe prices:
+  - Flat price (recurring monthly)
+  - Metered price (per-call overage)
+
+How billing works:
+  1. User clicks "Upgrade" in dashboard
+  2. We create a Stripe Checkout Session
+  3. User completes payment on Stripe's hosted page
+  4. Stripe sends "checkout.session.completed" webhook
+  5. We create/update the subscriptions row in DB
+
+Webhooks we handle (app/api/stripe/webhook/):
+  - checkout.session.completed      → subscription activated
+  - customer.subscription.updated   → status/renewal date changed
+  - customer.subscription.deleted   → subscription canceled
+  - invoice.payment_failed          → payment declined
+
+14-day free trial:
+  - All new users get a 14-day trial (configured in Stripe product)
+  - During trial, subscription status = 'trialing'
+  - No payment required until trial ends
+
+Key files:
+  - lib/stripe/client.ts           Stripe SDK initialization
+  - app/api/stripe/webhook/        Webhook handler
+  - scripts/setup-stripe-products.ts One-time setup script
+
+Env vars: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, STRIPE_PRO_PRICE_ID
+
+─────────────────────────────────────────────────────────────────────────────
+F. RESEND
+─────────────────────────────────────────────────────────────────────────────
+Purpose: Send transactional emails
+
+Emails we send:
+  - sendBookingConfirmation()         → to customer after HVAC booking
+  - sendNewBookingNotification()      → to owner when HVAC booking created
+  - sendPendingBookingNotification()  → to owner when salon booking requested
+  - sendMissedCallNotification()      → to owner when call < 15 sec (missed)
+
+All emails are HTML with branded styling. They include relevant details:
+customer name, service, date/time, phone number.
+
+Key files:
+  - lib/resend/client.ts   Resend API client
+  - lib/resend/emails.ts   All email templates and send functions
+
+Env vars: RESEND_API_KEY, RESEND_FROM_EMAIL
+
+
+================================================================================
+8. HOW AI VOICE CALLING WORKS (END-TO-END)
+================================================================================
+
+This is the most important part to understand. Follow the flow carefully.
+
+STEP 1: Call Comes In
+  - Customer calls the Retell phone number assigned to the business
+  - Retell answers the call and opens a WebSocket connection to:
+      wss://yourdomain.com/api/retell/llm
+  - Our custom server.ts handles WebSocket upgrades and passes the connection
+    to handleRetellConnection() in lib/retell/llm-handler.ts
+
+STEP 2: Call Initialization
+  - Retell sends a "call_details" message on the WebSocket
+  - This contains: retell_llm_dynamic_variables (business_id, business_name,
+    timezone, owner_first_name, service_area)
+  - We store this in memory for the duration of the call
+  - We also insert a row into the calls table with status='registered'
+
+STEP 3: Greeting
+  - Retell sends a "response_required" message with an empty transcript
+    (meaning: the call just started, say your greeting)
+  - We call Claude with the system prompt and an empty messages array
+  - Claude generates the opening greeting (e.g., "Thank you for calling
+    Diamond Threading! This is an AI assistant. How can I help you today?")
+  - We stream Claude's text back to Retell word by word
+  - Retell synthesizes it to voice and plays it to the caller
+
+STEP 4: Conversation Loop
+  - Caller speaks → Retell transcribes → sends response_required with transcript
+  - We build messages array: all previous turns + new caller message
+  - We call Claude with tools available (book_appointment)
+  - Claude either:
+      A. Responds with text → we stream it back to Retell
+      B. Calls the book_appointment tool → we execute booking logic
+
+STEP 5: Booking (Tool Use)
+  If Claude calls book_appointment, it provides these parameters:
+    - customer_name
+    - customer_phone
+    - service_type (threading, waxing, facial, etc.)
+    - preferred_date (e.g., "tomorrow", "Monday", "June 25")
+    - preferred_time_window (e.g., "morning", "afternoon", "10am")
+    - special_requests
+    - language (en or es)
+
+  Our handler:
+    1. Calls createPendingBooking() in lib/salon/booking.ts
+    2. This resolves the preferred date/time to real timestamps
+    3. Inserts a bookings row with status='pending'
+    4. Sends an email to the salon owner with the request details
+    5. Returns a result to Claude: "Booking requested for Monday morning"
+
+  Claude then generates a spoken confirmation message and we stream it back.
+
+STEP 6: Interruption Handling
+  - If the caller starts talking while the AI is speaking, Retell sends a new
+    response_required message with an "interrupted" flag
+  - We use AbortController to cancel the in-flight Claude request immediately
+  - We start fresh with the new message
+
+STEP 7: Call Ends
+  - Caller hangs up → Retell sends HTTP POST to /api/webhooks/retell
+    with event_type "call_ended"
+  - Our webhook handler:
+      a. Updates calls table: status='completed', ended_at, duration_seconds
+      b. If duration < 15 seconds → marks as 'missed', sends missed call email
+      c. Saves transcript turns to transcripts table
+      d. Saves recording_url
+
+STEP 8: Post-Call Analysis
+  - Retell sends another webhook: event_type "call_analyzed"
+  - Contains: sentiment (positive/neutral/frustrated), custom analysis
+  - Our webhook handler updates the calls row with sentiment + summary
+
+SUMMARY OF FILES INVOLVED:
+  server.ts                        WebSocket server setup
+  lib/retell/llm-handler.ts        Main call handling logic (biggest file)
+  lib/retell/system-prompt.ts      AI instructions
+  lib/retell/tools.ts              book_appointment tool definition
+  lib/salon/booking.ts             Creates pending bookings
+  app/api/webhooks/retell/         Handles post-call webhooks
+
+
+================================================================================
+9. HOW BOOKINGS WORK
+================================================================================
+
+There are two booking flows depending on business type:
+
+─────────────────────────────────────────────────────────────────────────────
+A. SALON BOOKING (Current flow)
+─────────────────────────────────────────────────────────────────────────────
+1. During call, customer says they want an appointment
+2. Claude collects: name, phone, service, preferred date + time
+3. Claude calls book_appointment tool
+4. createPendingBooking() in lib/salon/booking.ts:
+   a. Parses preferred_date string → resolves to actual date
+   b. Maps preferred_time_window to hour range (morning=9-12, afternoon=12-17)
+   c. Inserts bookings row with:
+      - status = 'pending'
+      - scheduled_start/end based on resolved date + service duration
+      - notes = preferred date/time text + any special requests
+   d. Sends email to salon owner: "New appointment request — action needed"
+5. Owner logs into dashboard → sees booking in /dashboard/bookings
+6. Owner confirms or reschedules the booking
+7. Status changes to 'confirmed'
+8. (TODO) Customer notified of confirmation
+
+Service durations (in the code):
+  Threading:     10-15 min
+  Waxing:        10-30 min
+  Facial:        45-60 min
+  Other:         30 min default
+
+─────────────────────────────────────────────────────────────────────────────
+B. HVAC BOOKING (Legacy, calendar-based)
+─────────────────────────────────────────────────────────────────────────────
+1. During call, Claude collects full details including customer address
+2. Claude calls book_appointment tool
+3. createCalendarAppointment() in lib/google/calendar.ts:
+   a. Resolves date/time (emergency = ASAP same day)
+   b. Creates Google Calendar event on owner's calendar
+   c. Inserts bookings row with status='confirmed' + calendar_event_id
+   d. Sends confirmation email to customer
+   e. Sends alert email to business owner
+4. Booking is immediately confirmed, no manual review needed
+
+Key difference:
+  Salon = pending → owner reviews → confirmed
+  HVAC  = immediately confirmed + goes to Google Calendar
+
+─────────────────────────────────────────────────────────────────────────────
+C. DASHBOARD BOOKINGS PAGE
+─────────────────────────────────────────────────────────────────────────────
+  /dashboard/bookings shows all bookings for the business
+  - Filter by status (pending, confirmed, completed, etc.)
+  - Owner can: confirm, cancel, mark as completed, mark as no-show
+  - Booking details show: customer info, service, date/time, notes
+
+
+================================================================================
+10. HOW BILLING & SUBSCRIPTIONS WORK
+================================================================================
+
+NEW USERS:
+  - When signing up, a subscriptions row is created with:
+      status = 'trialing'
+      trial_ends_at = now + 14 days
+  - Full access during trial, no credit card required (depending on config)
+
+UPGRADING:
+  1. User clicks "Upgrade" in /dashboard/billing
+  2. We create a Stripe Checkout Session (mode: 'subscription')
+  3. Stripe redirects user to hosted checkout page
+  4. User enters payment info and subscribes
+  5. Stripe sends webhook: checkout.session.completed
+  6. Our handler updates subscriptions table: status='active'
+
+MONTHLY BILLING:
+  - Stripe charges the flat monthly price automatically
+  - Overage calls (if metered billing active) charged at end of period
+  - On renewal: Stripe sends customer.subscription.updated webhook
+  - We update current_period_end in our DB
+
+FAILED PAYMENTS:
+  - Stripe sends invoice.payment_failed webhook
+  - We update status='past_due' in DB
+  - Dashboard shows warning banner
+  - Access continues briefly (Stripe retries payment over several days)
+
+CANCELLATION:
+  - User clicks "Cancel Subscription" in /dashboard/billing
+  - We set cancel_at_period_end=true via Stripe API
+  - Subscription active until current period ends
+  - On period end: Stripe sends customer.subscription.deleted webhook
+  - We update status='canceled'
+
+SUBSCRIPTION STATUS VALUES:
+  trialing    — in free trial
+  active      — paid and in good standing
+  past_due    — payment failed, retrying
+  canceled    — subscription ended
+  incomplete  — checkout started but not completed
+
+
+================================================================================
+11. KEY API ROUTES & ENDPOINTS
+================================================================================
+
+WEBSOCKET:
+  wss://domain.com/api/retell/llm
+    Purpose: Real-time AI conversation during calls
+    Protocol: Retell AI custom protocol
+    Handler: lib/retell/llm-handler.ts → handleRetellConnection()
+
+HTTP (REST API Routes):
+  GET  /api/auth/callback
+    Purpose: Supabase OAuth code exchange
+    Called by: Supabase after login redirect
+    Auth: None (public)
+
+  POST /api/auth/signout
+    Purpose: Sign out user
+    Auth: User session
+
+  GET  /api/auth/google/connect
+    Purpose: Start Google Calendar OAuth
+    Auth: User session (redirects to Google)
+
+  GET  /api/auth/google/callback
+    Purpose: Receive Google OAuth code, store tokens
+    Called by: Google after OAuth consent
+    Auth: None (public)
+
+  POST /api/webhooks/retell
+    Purpose: Receive call events from Retell
+    Auth: Retell webhook signature verification (RETELL_WEBHOOK_SECRET)
+    Called by: Retell AI servers
+    Events handled: call_started, call_ended, call_analyzed
+
+  POST /api/stripe/webhook
+    Purpose: Receive billing events from Stripe
+    Auth: Stripe webhook signature verification (STRIPE_WEBHOOK_SECRET)
+    Called by: Stripe servers
+    Events handled: checkout.session.completed,
+                    customer.subscription.updated,
+                    customer.subscription.deleted,
+                    invoice.payment_failed
+
+UI PAGES (Next.js Routes):
+  /                         Landing page (public)
+  /pricing                  Pricing page (public)
+  /login                    Login form
+  /signup                   Registration
+  /onboarding               Business setup (auth required)
+  /dashboard                Main overview
+  /dashboard/calls          Call history + details
+  /dashboard/bookings       Appointment management
+  /dashboard/settings       Business config, calendar connect
+  /dashboard/billing        Subscription management
+
+
+================================================================================
+12. ENVIRONMENT VARIABLES
+================================================================================
+
+Create a .env.local file in the project root with these values:
+
+# ── Supabase ──────────────────────────────────────────────────────────────
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxxxx
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxxxxx
+
+# ── Retell AI ─────────────────────────────────────────────────────────────
+RETELL_API_KEY=key_xxxxxx
+RETELL_WEBHOOK_SECRET=whsec_xxxxxx
+# (RETELL_WEBHOOK_SECRET can be omitted in dev — signature check is skipped)
+
+# ── Claude (Anthropic) ────────────────────────────────────────────────────
+ANTHROPIC_API_KEY=sk-ant-xxxxxx
+
+# ── Google Calendar ───────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxx
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+
+# ── Stripe ────────────────────────────────────────────────────────────────
+STRIPE_SECRET_KEY=sk_test_xxxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxx
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_xxxxxx
+STRIPE_PRO_PRICE_ID=price_xxxxxx
+# (Get STRIPE_PRO_PRICE_ID by running: npx tsx scripts/setup-stripe-products.ts)
+
+# ── Resend ────────────────────────────────────────────────────────────────
+RESEND_API_KEY=re_xxxxxx
+RESEND_FROM_EMAIL=noreply@yourdomain.com
+
+# ── App ───────────────────────────────────────────────────────────────────
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+
+================================================================================
+13. SCRIPTS & UTILITIES
+================================================================================
+
+scripts/setup-stripe-products.ts
+  - Run ONE TIME when setting up a new environment
+  - Creates Stripe products (Starter, Pro, Business) with flat + metered prices
+  - Outputs the price IDs you need to put in .env.local
+  - Run: npx tsx scripts/setup-stripe-products.ts
+
+scripts/test-websocket.ts
+  - Tests the Retell LLM WebSocket locally without making a real phone call
+  - Simulates a Retell call: sends call_details → response_required messages
+  - Streams Claude's response to your terminal
+  - Useful for testing prompt changes or booking logic
+  - Requires dev server running (npm run dev)
+  - Run: npx tsx scripts/test-websocket.ts
+
+
+================================================================================
+14. MULTI-TENANCY & SECURITY
+================================================================================
+
+BUSINESS ISOLATION:
+  Every row in every table has a business_id column. Supabase RLS policies
+  ensure that queries only return rows where business_id matches the logged-in
+  user's business. This is enforced at the database level, not just in code.
+
+  The key SQL function that makes this work:
+    CREATE OR REPLACE FUNCTION auth_business_id()
+    RETURNS UUID AS $$
+      SELECT business_id FROM user_profiles WHERE id = auth.uid()
+    $$ LANGUAGE sql SECURITY DEFINER;
+
+  RLS policy example (calls table):
+    CREATE POLICY "calls: business read"
+      ON calls FOR SELECT
+      USING (business_id = auth_business_id());
+
+  This means even if a bug in our code fails to filter by business_id,
+  the database will still refuse to return another business's data.
+
+WEBHOOK SECURITY:
+  - Retell webhooks: verified using RETELL_WEBHOOK_SECRET (HMAC signature)
+  - Stripe webhooks: verified using STRIPE_WEBHOOK_SECRET (Stripe signature)
+  - Both use raw request body for signature verification (not parsed JSON)
+  - Service role client used in webhook handlers (bypasses RLS intentionally)
+
+SECRET MANAGEMENT:
+  - SUPABASE_SERVICE_ROLE_KEY must NEVER be in client-side code
+  - Only lib/supabase/server.ts exposes it, and only in server contexts
+  - All NEXT_PUBLIC_ vars are safe to expose (Supabase anon key is public-safe)
+  - Google tokens stored in DB as JSONB (consider encrypting at rest)
+
+STRIPE API VERSION:
+  The codebase uses Stripe API version 2026-04-22.dahlia (latest as of June 2026).
+  Note: current_period_end is now on subscription.items[0] not subscription root
+  in this version. Keep this in mind if upgrading Stripe SDK.
+
+
+================================================================================
+QUICK REFERENCE: DATA FLOW DIAGRAMS
+================================================================================
+
+CALL FLOW:
+  Phone call → Retell (phone) → WebSocket → server.ts → llm-handler.ts
+    → Claude API → streams text back → Retell (voice synthesis) → caller
+
+  After call:
+    Retell webhook → /api/webhooks/retell → Supabase (calls + transcripts)
+                                          → Resend (emails if needed)
+
+BOOKING FLOW (Salon):
+  Claude tool call → lib/salon/booking.ts → Supabase (bookings insert)
+                                          → Resend (email to owner)
+  Owner reviews → dashboard → confirms → status update → Supabase
+
+BOOKING FLOW (HVAC):
+  Claude tool call → lib/google/calendar.ts → Google Calendar (event created)
+                                            → Supabase (bookings insert)
+                                            → Resend (emails to owner + customer)
+
+BILLING FLOW:
+  User clicks upgrade → Stripe Checkout → Stripe webhook
+    → /api/stripe/webhook → Supabase (subscriptions update)
+
+AUTH FLOW:
+  Signup → Supabase Auth → businesses row + user_profiles row → /onboarding
+  Login  → Supabase Auth → cookie session → /dashboard
+  All requests → middleware.ts → check session → allow or redirect
+
+
+================================================================================
+END OF DOCUMENTATION
+================================================================================

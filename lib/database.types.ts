@@ -10,11 +10,21 @@ export type CallStatus       = 'registered' | 'ongoing' | 'completed' | 'missed'
 export type CallType         = 'inbound' | 'outbound'
 export type Sentiment        = 'positive' | 'neutral' | 'frustrated'
 export type JobType          =
+  // HVAC (legacy)
   | 'ac_repair' | 'ac_not_turning_on' | 'furnace_repair'
   | 'furnace_not_turning_on' | 'installation' | 'maintenance'
-  | 'ductwork' | 'thermostat' | 'refrigerant' | 'emergency' | 'other'
+  | 'ductwork' | 'thermostat' | 'refrigerant' | 'emergency'
+  // Salon — threading
+  | 'eyebrow_threading' | 'upper_lip_threading' | 'chin_threading'
+  | 'full_face_threading' | 'side_burns_threading' | 'neck_threading' | 'forehead_threading'
+  // Salon — waxing
+  | 'eyebrow_waxing' | 'upper_lip_waxing' | 'chin_waxing' | 'full_face_waxing'
+  // Salon — skin
+  | 'basic_facial' | 'deep_cleansing_facial'
+  // Generic
+  | 'other'
 export type Urgency          = 'emergency' | 'soon' | 'scheduled'
-export type BookingStatus    = 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+export type BookingStatus    = 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
 export type NotificationChannel = 'email' | 'sms'
 export type NotificationType =
   | 'call_summary' | 'appointment_confirmation' | 'appointment_reminder'
@@ -278,7 +288,7 @@ export type Database = {
           customer_name: string
           customer_phone: string
           customer_email: string | null
-          customer_address: string
+          customer_address: string | null
           job_type: JobType
           urgency: Urgency
           notes: string | null
@@ -298,7 +308,7 @@ export type Database = {
           customer_name: string
           customer_phone: string
           customer_email?: string | null
-          customer_address: string
+          customer_address?: string | null
           job_type: JobType
           urgency?: Urgency
           notes?: string | null
