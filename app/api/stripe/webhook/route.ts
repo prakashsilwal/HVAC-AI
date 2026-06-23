@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { stripe } from '@/lib/stripe/client'
+import { getStripe } from '@/lib/stripe/client'
 import { createServiceClient } from '@/lib/supabase/server'
 import type Stripe from 'stripe'
 
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
   try {
     if (process.env.STRIPE_WEBHOOK_SECRET && signature) {
-      event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET)
+      event = getStripe().webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET)
     } else {
       console.warn('[stripe/webhook] No webhook secret — skipping signature check')
       event = JSON.parse(rawBody) as Stripe.Event
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       if (!businessId || session.mode !== 'subscription') break
 
       const subscriptionId = session.subscription as string
-      const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+      const sub = await getStripe().subscriptions.retrieve(subscriptionId, {
         expand: ['items'],
       })
 

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { Check, Mic, Zap, Phone, Calendar, BarChart3, Shield } from 'lucide-react'
-import { stripe } from '@/lib/stripe/client'
+import { getStripe } from '@/lib/stripe/client'
 import { createServiceClient } from '@/lib/supabase/server'
 import { getBusinessId } from '@/lib/auth/business'
 
@@ -33,14 +33,14 @@ async function startCheckout() {
   let customerId = existingSub?.stripe_customer_id ?? null
 
   if (!customerId) {
-    const customer = await stripe.customers.create({
+    const customer = await getStripe().customers.create({
       name: business?.name ?? 'Business',
       metadata: { business_id: businessId },
     })
     customerId = customer.id
   }
 
-  const session = await stripe.checkout.sessions.create({
+  const session = await getStripe().checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: process.env.STRIPE_PRO_PRICE_ID!, quantity: 1 }],
