@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "node --env-file=.env.local node_modules/.bin/tsx server.ts",
     "build": "next build",
-    "start": "NODE_ENV=production tsx server.ts",
+    "start": "NODE_ENV=production node node_modules/.bin/tsx server.ts",
     "lint": "eslint"
   },
   "dependencies": {
