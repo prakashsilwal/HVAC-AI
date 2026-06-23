@@ -1,4 +1,4 @@
-import { resend, FROM } from './client'
+import { getResend, FROM } from './client'
 
 type BookingConfirmationProps = {
   to: string
@@ -99,7 +99,7 @@ export async function sendBookingConfirmation(props: BookingConfirmationProps) {
 </body>
 </html>`
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM,
     to,
     subject: `Appointment Confirmed — ${formatJob(jobType)} on ${new Date(scheduledStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
@@ -170,7 +170,7 @@ export async function sendNewBookingNotification(props: NewBookingNotificationPr
 </body>
 </html>`
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM,
     to,
     subject: `New Job Booked — ${customerName} · ${formatJob(jobType)}`,
@@ -252,7 +252,7 @@ export async function sendPendingBookingNotification(props: PendingBookingNotifi
 </body>
 </html>`
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM,
     to,
     subject: `New Appointment Request — ${customerName} · ${serviceType}`,
@@ -308,7 +308,7 @@ export async function sendMissedCallNotification(props: MissedCallNotificationPr
 </body>
 </html>`
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM,
     to,
     subject: `Missed Call from ${callerName ?? callerNumber}`,
