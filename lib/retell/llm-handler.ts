@@ -139,6 +139,8 @@ async function handleResponseRequired(
 
 // ── Main connection handler ───────────────────────────────────
 export function handleRetellConnection(ws: WebSocket): void {
+  console.log('[retell] New WebSocket connection established')
+
   const state: CallState = {
     callId: '',
     businessId: '',
@@ -150,12 +152,15 @@ export function handleRetellConnection(ws: WebSocket): void {
   }
 
   ws.on('message', async (raw: Buffer) => {
+    const rawStr = raw.toString()
+    console.log('[retell] Message received:', rawStr.slice(0, 200))
+
     let message: RetellIncomingMessage
 
     try {
-      message = JSON.parse(raw.toString()) as RetellIncomingMessage
+      message = JSON.parse(rawStr) as RetellIncomingMessage
     } catch {
-      console.error('[retell] Failed to parse message:', raw.toString())
+      console.error('[retell] Failed to parse message:', rawStr)
       return
     }
 
