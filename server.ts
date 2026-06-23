@@ -19,13 +19,15 @@ app.prepare().then(() => {
 
   server.on('upgrade', (req, socket, head) => {
     const url = req.url ?? ''
+    console.log(`[ws] Upgrade request: "${url}" from ${req.headers['x-forwarded-for'] ?? req.socket.remoteAddress}`)
 
     if (url === '/api/retell/llm') {
       wss.handleUpgrade(req, socket as never, head, (ws) => {
+        console.log('[ws] Upgrade complete, handing to Retell handler')
         handleRetellConnection(ws)
       })
     } else {
-      // Reject any other WebSocket upgrade attempt
+      console.log(`[ws] Rejected upgrade for unknown path: "${url}"`)
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
       socket.destroy()
     }
