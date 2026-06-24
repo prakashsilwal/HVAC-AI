@@ -21,7 +21,7 @@ app.prepare().then(() => {
     const url = req.url ?? ''
     console.log(`[ws] Upgrade request: "${url}" from ${req.headers['x-forwarded-for'] ?? req.socket.remoteAddress}`)
 
-    if (url === '/api/retell/llm') {
+    if (url.startsWith('/api/retell/llm')) {
       wss.handleUpgrade(req, socket as never, head, (ws) => {
         console.log('[ws] Upgrade complete, handing to Retell handler')
         handleRetellConnection(ws)
